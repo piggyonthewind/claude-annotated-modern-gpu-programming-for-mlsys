@@ -21,6 +21,7 @@ warehouse) — no CPU, cache, or assembly knowledge required.
   - [`background.md`](background.md) — Chapter 1: Background
   - [`performance.md`](performance.md) — Chapter 2: Performance
   - [`data_layout.md`](data_layout.md) — Chapter 3: Data Layout
+  - [`layout_generations.md`](layout_generations.md) — Chapter 4: The Evolution of Tensor Core Data Layouts
 
 ## What it covers
 
@@ -50,6 +51,13 @@ multiplies, threads conduct), and the numerics of Tensor-Core vs. CUDA-core matm
 3. **Named Axes** — TMEM `(@TLane,@TCol)` and register fragments `(@laneid,@reg)`, where a "location" is a tuple, not one address
 4. **Replication & Offset** — broadcasting the same data into many copies, and multi-GPU mesh sharding
 5. **Swizzle Layout** — XOR address permutation to kill shared-memory bank conflicts
+
+### Chapter 4 — The Evolution of Tensor Core Data Layouts *(Ampere → Hopper → Blackwell)*
+1. **Two memory requirements** — coalesced GMEM reads and bank-conflict-free SMEM, which every layout must respect
+2. **Ampere** — operands *and* accumulator as register fragments; `ldmatrix` staging; hand-written XOR swizzle
+3. **Hopper** — `wgmma` reads operands straight from SMEM via a 64-bit matrix descriptor (hardware-managed swizzle)
+4. **Blackwell** — `tcgen05.mma` moves the accumulator into TMEM; block-scaled MMA and scale-factor staging
+5. **The invariant** — each instruction's output layout must equal the next's input layout, or you get silent wrong answers
 
 ## How the site is built
 
