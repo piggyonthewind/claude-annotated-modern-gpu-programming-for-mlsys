@@ -20,6 +20,7 @@ warehouse) — no CPU, cache, or assembly knowledge required.
 - 📝 **Plain markdown (the source of truth):**
   - [`background.md`](background.md) — Chapter 1: Background
   - [`performance.md`](performance.md) — Chapter 2: Performance
+  - [`data_layout.md`](data_layout.md) — Chapter 3: Data Layout
 
 ## What it covers
 
@@ -42,6 +43,13 @@ multiplies, threads conduct), and the numerics of Tensor-Core vs. CUDA-core matm
 4. **The Optimization Ladder** — tiled → TMA → warp specialization → clusters → multi-consumer
 5. **Overlap, Occupancy & Resource Pressure** — keeping the matrix machines saturated
 6. **Using Roofline to Guide Optimization** — a three-step "which wall am I hitting?" recipe
+
+### Chapter 3 — Data Layout *(where each number physically lives)*
+1. **The Shape-Stride Model** — layout as a function from `(i,j)` to an address; free transpose/reshape (like NumPy strides)
+2. **Tile Layout** — nesting shape-stride to describe blocked/tiled matrices
+3. **Named Axes** — TMEM `(@TLane,@TCol)` and register fragments `(@laneid,@reg)`, where a "location" is a tuple, not one address
+4. **Replication & Offset** — broadcasting the same data into many copies, and multi-GPU mesh sharding
+5. **Swizzle Layout** — XOR address permutation to kill shared-memory bank conflicts
 
 ## How the site is built
 
