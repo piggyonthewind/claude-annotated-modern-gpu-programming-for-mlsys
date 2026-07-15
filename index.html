@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Annotated: Modern GPU Programming for MLSys — Background</title>
+<meta name="description" content="A from-zero annotated companion to the Background chapter of Modern GPU Programming for MLSys, written for software engineers with no GPU or hardware background.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
+<style>
+  :root{
+    --bg:#ffffff; --fg:#1f2328; --muted:#636c76; --line:#d0d7de;
+    --sidebar-bg:#f6f8fa; --accent:#0969da; --accent-soft:#ddf4ff;
+    --code-bg:#f6f8fa; --quote-bg:#f6f8fa; --quote-bar:#0969da;
+    --table-head:#f6f8fa; --table-alt:#fbfcfd;
+    --sidebar-w:300px; --read-w:820px;
+  }
+  /* dark via system preference OR explicit toggle */
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0d1117; --fg:#e6edf3; --muted:#9198a1; --line:#30363d;
+      --sidebar-bg:#161b22; --accent:#4493f8; --accent-soft:#12283f;
+      --code-bg:#161b22; --quote-bg:#161b22; --quote-bar:#316dca;
+      --table-head:#161b22; --table-alt:#11161d;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0d1117; --fg:#e6edf3; --muted:#9198a1; --line:#30363d;
+    --sidebar-bg:#161b22; --accent:#4493f8; --accent-soft:#12283f;
+    --code-bg:#161b22; --quote-bg:#161b22; --quote-bar:#316dca;
+    --table-head:#161b22; --table-alt:#11161d;
+  }
+  :root[data-theme="light"]{
+    --bg:#ffffff; --fg:#1f2328; --muted:#636c76; --line:#d0d7de;
+    --sidebar-bg:#f6f8fa; --accent:#0969da; --accent-soft:#ddf4ff;
+    --code-bg:#f6f8fa; --quote-bg:#f6f8fa; --quote-bar:#0969da;
+    --table-head:#f6f8fa; --table-alt:#fbfcfd;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--fg);
+    font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--accent); text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  /* Layout */
+  .wrap{display:flex; min-height:100vh}
+  aside{
+    width:var(--sidebar-w); flex:0 0 var(--sidebar-w);
+    background:var(--sidebar-bg); border-right:1px solid var(--line);
+    position:sticky; top:0; align-self:flex-start; height:100vh; overflow-y:auto;
+    padding:22px 18px 40px;
+  }
+  aside .brand{font-weight:700; font-size:15px; letter-spacing:.2px; margin-bottom:4px}
+  aside .brand span{color:var(--muted); font-weight:500}
+  aside .src{font-size:12.5px; color:var(--muted); margin-bottom:18px; line-height:1.5}
+  nav#toc{font-size:14px}
+  nav#toc a{display:block; color:var(--muted); padding:4px 10px; border-radius:6px; border-left:2px solid transparent}
+  nav#toc a:hover{color:var(--fg); background:var(--accent-soft); text-decoration:none}
+  nav#toc a.h3{padding-left:24px; font-size:13px}
+  nav#toc a.active{color:var(--accent); border-left-color:var(--accent); background:var(--accent-soft); font-weight:600}
+
+  main{flex:1 1 auto; min-width:0; display:flex; justify-content:center; padding:0 28px}
+  article{width:100%; max-width:var(--read-w); padding:44px 8px 120px}
+
+  /* Top bar */
+  .topbar{display:flex; align-items:center; gap:14px; justify-content:flex-end;
+    max-width:var(--read-w); margin:0 auto; padding:14px 8px 0}
+  .topbar a{font-size:13px; color:var(--muted)}
+  .topbar button{
+    font:inherit; font-size:13px; cursor:pointer; color:var(--muted);
+    background:transparent; border:1px solid var(--line); border-radius:7px; padding:5px 10px}
+  .topbar button:hover{color:var(--fg); border-color:var(--muted)}
+
+  /* Typography */
+  article h1{font-size:2em; line-height:1.25; margin:.2em 0 .6em; letter-spacing:-.01em}
+  article h2{font-size:1.5em; margin:2.2em 0 .7em; padding-bottom:.3em; border-bottom:1px solid var(--line); scroll-margin-top:20px}
+  article h3{font-size:1.18em; margin:1.8em 0 .5em; scroll-margin-top:20px}
+  article p{margin:.75em 0}
+  article strong{font-weight:650}
+  article code{background:var(--code-bg); border:1px solid var(--line); border-radius:5px; padding:.12em .38em; font-size:.88em;
+    font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
+  article pre{background:var(--code-bg); border:1px solid var(--line); border-radius:10px; padding:16px 18px; overflow-x:auto; margin:1.1em 0}
+  article pre code{background:transparent; border:0; padding:0; font-size:13.5px; line-height:1.55}
+  article blockquote{margin:1.1em 0; padding:.6em 1.1em; background:var(--quote-bg);
+    border-left:4px solid var(--quote-bar); border-radius:0 8px 8px 0; color:var(--fg)}
+  article blockquote p:first-child{margin-top:0} article blockquote p:last-child{margin-bottom:0}
+  article ul,article ol{padding-left:1.5em; margin:.7em 0}
+  article li{margin:.3em 0}
+  article hr{border:0; border-top:1px solid var(--line); margin:2.4em 0}
+  article table{border-collapse:collapse; width:100%; margin:1.2em 0; font-size:14.5px; display:block; overflow-x:auto}
+  article th,article td{border:1px solid var(--line); padding:8px 12px; text-align:left; vertical-align:top}
+  article thead th{background:var(--table-head)}
+  article tbody tr:nth-child(even){background:var(--table-alt)}
+  article h2 .anchor,article h3 .anchor{opacity:0; margin-left:8px; font-size:.8em; color:var(--muted)}
+  article h2:hover .anchor,article h3:hover .anchor{opacity:1}
+
+  .loading{color:var(--muted); padding:40px 0}
+  .err{color:#cf222e; background:var(--code-bg); border:1px solid var(--line); border-radius:10px; padding:16px 18px}
+
+  /* Mobile */
+  .menu-btn{display:none}
+  @media (max-width:900px){
+    aside{position:fixed; z-index:20; transform:translateX(-100%); transition:transform .2s; box-shadow:0 0 40px rgba(0,0,0,.25)}
+    aside.open{transform:translateX(0)}
+    .menu-btn{display:inline-block}
+    main{padding:0 16px}
+    .topbar{justify-content:space-between}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <aside id="sidebar">
+    <div class="brand">Annotated GPU Background <span></span></div>
+    <div class="src">A from-zero companion to<br>
+      <a href="https://mlc.ai/modern-gpu-programming-for-mlsys/chapter_background/index.html" target="_blank" rel="noopener">Modern GPU Programming for MLSys — Background</a>
+    </div>
+    <nav id="toc"><div class="loading">Building contents…</div></nav>
+  </aside>
+
+  <main>
+    <div style="width:100%">
+      <div class="topbar">
+        <button class="menu-btn" id="menuBtn" aria-label="Toggle contents">☰ Contents</button>
+        <div style="display:flex; gap:14px; align-items:center">
+          <a href="https://github.com/piggyonthewind/claude-annotated-modern-gpu-programming-for-mlsys" target="_blank" rel="noopener">GitHub</a>
+          <button id="themeBtn" title="Toggle light/dark">◐ Theme</button>
+        </div>
+      </div>
+      <article id="content"><div class="loading">Loading the annotated chapter…</div></article>
+    </div>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+(function(){
+  var content = document.getElementById('content');
+  var toc = document.getElementById('toc');
+
+  function slugify(t){
+    return t.toLowerCase().trim()
+      .replace(/[^\w\s-]/g,'')      // drop punctuation
+      .replace(/\s+/g,'-')
+      .replace(/-+/g,'-');
+  }
+
+  function render(md){
+    marked.setOptions({gfm:true, breaks:false});
+    content.innerHTML = marked.parse(md);
+
+    // syntax highlight
+    content.querySelectorAll('pre code').forEach(function(b){ try{ hljs.highlightElement(b); }catch(e){} });
+
+    // ids + anchors + TOC
+    var used = {};
+    var heads = content.querySelectorAll('h2, h3');
+    var items = [];
+    heads.forEach(function(h){
+      var base = slugify(h.textContent) || 'section';
+      var id = base, n = 1;
+      while(used[id]){ id = base + '-' + (++n); }
+      used[id] = true; h.id = id;
+      var a = document.createElement('a'); a.className='anchor'; a.href='#'+id; a.textContent='#';
+      h.appendChild(a);
+      items.push({id:id, text:h.textContent.replace(/#$/,'').trim(), level:h.tagName});
+    });
+
+    toc.innerHTML = '';
+    items.forEach(function(it){
+      var link = document.createElement('a');
+      link.href = '#'+it.id; link.textContent = it.text;
+      link.className = (it.level==='H3' ? 'h3' : 'h2');
+      link.addEventListener('click', function(){ if(window.innerWidth<=900) sidebar.classList.remove('open'); });
+      toc.appendChild(link);
+    });
+
+    setupScrollSpy(items);
+  }
+
+  function setupScrollSpy(items){
+    var links = {};
+    toc.querySelectorAll('a').forEach(function(a){ links[a.getAttribute('href').slice(1)] = a; });
+    var obs = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){
+          Object.values(links).forEach(function(l){ l.classList.remove('active'); });
+          if(links[e.target.id]) links[e.target.id].classList.add('active');
+        }
+      });
+    }, {rootMargin:'0px 0px -75% 0px', threshold:0});
+    items.forEach(function(it){ var el=document.getElementById(it.id); if(el) obs.observe(el); });
+  }
+
+  fetch('background.md', {cache:'no-cache'})
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
+    .then(render)
+    .catch(function(err){
+      content.innerHTML = '<div class="err"><strong>Could not load <code>background.md</code>.</strong><br>'+
+        'This page loads the chapter over HTTP, so open it via the published site (GitHub Pages) '+
+        'or a local server (e.g. <code>python -m http.server</code>) rather than a <code>file://</code> path.<br><br>'+
+        '<span style="color:var(--muted)">'+String(err)+'</span></div>';
+      toc.innerHTML = '';
+    });
+
+  // theme toggle (overrides system pref)
+  var themeBtn = document.getElementById('themeBtn');
+  var saved = null; try{ saved = localStorage.getItem('theme'); }catch(e){}
+  function apply(t){
+    document.documentElement.style.colorScheme = t;
+    document.documentElement.setAttribute('data-theme', t);
+  }
+  if(saved) apply(saved);
+  themeBtn.addEventListener('click', function(){
+    var cur = document.documentElement.getAttribute('data-theme');
+    if(!cur){ cur = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark':'light'; }
+    var next = cur==='dark' ? 'light':'dark';
+    apply(next); try{ localStorage.setItem('theme', next); }catch(e){}
+  });
+
+  // mobile sidebar
+  var sidebar = document.getElementById('sidebar');
+  document.getElementById('menuBtn').addEventListener('click', function(){ sidebar.classList.toggle('open'); });
+})();
+</script>
+</body>
+</html>
