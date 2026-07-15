@@ -75,6 +75,16 @@ fixed width. The unit is **bytes/s** — the **memory bandwidth**.
 > *width*, latency is its *length*. Background's deep pipelines hide latency; roofline
 > is about bandwidth.)
 
+To actually *reach* that bandwidth roof you need **many memory moves in flight at
+once** — one tile fetch is slow (high latency), so if you waited for each before
+starting the next, the road would sit mostly empty. Concurrency comes from two places:
+*within one team*, the deep pipeline (Background §4) keeps several tiles loading at once
+(capped by SMEM space); *across the GPU*, the ~100+ workstations each run teams issuing
+their own loads, so **hundreds of fetches are on the road simultaneously**. Roughly
+*bytes-in-flight = bandwidth × latency* — you keep enough trips staggered on the road to
+keep it full. More in-flight loads don't beat the bandwidth ceiling; they're how you
+*reach* it.
+
 Here's the key: how fast bandwidth *lets you compute* depends on **how much math you
 squeeze out of each byte you haul in.** If every byte feeds a lot of math, the road
 easily keeps the machines fed; if every byte feeds only a little math, the road
@@ -199,6 +209,37 @@ This is the tile-size lever from §2: a bigger tile on the table means each byte
 hauled from the warehouse feeds more arithmetic before you evict it — directly raising
 AI (recall 16×16 → 8 FLOP/byte vs 64×64 → 32 FLOP/byte). The limit is table space
 (SMEM is small), which is why tile sizes are a central tuning knob.
+
+Three things about tiling that trip people up:
+
+**It moves the *same* numbers *fewer times*, not more numbers.** Each input element is
+*needed* many times by the math no matter what — tiling only changes whether each reuse
+costs a warehouse trip or a cheap table read. Trace one element `A[0][0]` in a 4×4
+matmul: it's used by every output in row 0 (`C[0][0..3]`). *Without* a table you compute
+outputs one at a time and re-fetch `A[0][0]` from the warehouse **4 times**; *with* the
+row staged on the table you fetch it **once** and the other 3 uses read it locally. Over
+an N×N matmul each element is loaded ~`N` times naively vs ~`N/B` times with a tile of
+width `B` — so **total warehouse traffic drops** (~`2N³` → ~`2N³/B`). *This is why
+tiling is the right move precisely when you're memory-bound: it cuts total traffic.*
+
+**So bigger tiles help *even though* each load is bigger.** A larger fetch isn't waste:
+outputs are *pairs* (rows × columns → math grows like tile **area**) while inputs are
+*two lists* (rows + columns → bytes grow like tile **perimeter**). Area outruns
+perimeter, so FLOP/byte rises:
+
+| Tile (fp16, one K-slice) | Bytes loaded | Math done | AI |
+|---|---|---|---|
+| 16×16 | 16+16 = 64 B | 16×16 = 512 FLOP | **8** |
+| 64×64 | 64+64 = 256 B | 64×64 = 8192 FLOP | **32** |
+
+4× the tile side → 4× the bytes but **16×** the math → 4× the AI.
+
+**Where the reused numbers live:** the shared tile goes in **shared memory (SMEM)** —
+reuse *across the team* needs shared storage, and a register is private to one thread
+(invisible to the others). Registers hold only the small per-thread working set a thread
+is multiplying right now (copied in from SMEM) plus the accumulator. So the path is
+**GMEM → SMEM (team tile, big reuse) → registers (tiny working set + running total)** —
+the same "load once, reuse many" trick applied at each level.
 
 ### Low precision — make each number smaller
 > Use **fewer bytes per number**: fp32 (4 bytes) → fp16/bf16 (2) → fp8 (1) → fp4

@@ -190,6 +190,38 @@ To place a CTA physically, one more word:
 > team's shared table, their tools, and the matrix machines. So: **factory = GPU,
 > workstation = SM, team = CTA, squad = warp, worker = thread.**
 
+### Why three levels? warp vs. warpgroup vs. CTA
+
+These are all "groups of threads," so why have three? Because each answers a different
+need — and two of them are *fixed by hardware* while the third is *yours to choose*:
+
+| Level | Size | Why it exists |
+|-------|------|---------------|
+| **warp** | fixed 32 | the hardware's lockstep execution bundle — you don't pick it |
+| **warpgroup** | fixed 128 | exactly the hands needed to hold and drive one matrix-multiply (`wgmma`) |
+| **CTA** | **flexible** (up to ~1024) | *your* team; you choose how many warps/warpgroups it holds |
+
+Two distinctions do all the work:
+
+- **warp vs. CTA — execution unit vs. cooperation unit.** A warp is *how threads
+  execute* (32 in lockstep). A CTA is *how threads cooperate*: only a CTA owns a
+  **shared table (SMEM)** and a **barrier**, and only threads in the same CTA can pass
+  data to each other cheaply. A lone warp has no shared table and can't sync with other
+  warps — so it can't stage a tile for reuse. That's why tiling needs a CTA, not just a
+  warp.
+- **warpgroup vs. CTA — a fixed machine-interface vs. a flexible team.** The matrix
+  machine physically needs exactly 128 threads to feed it (32 is too few to hold a
+  tile; a variable-size CTA is the wrong shape to build a hardware instruction around).
+  So the warpgroup is the *fixed 128-thread unit that drives one MMA* — it owns no
+  table; it's an *operation scope*, not a home for data. A CTA then **composes** several
+  warpgroups: either doing the **same** job and splitting the data (2 consumer
+  warpgroups each computing half the output tile — because 128 is a hard cap), or
+  **different** jobs (1 producer warpgroup loading + 1 consumer warpgroup computing —
+  the warp specialization from §4).
+
+So: **warp = fixed execution bundle, warpgroup = fixed matrix-machine interface, CTA =
+the flexible team you compose out of them.**
+
 ### cluster — a few neighboring teams who can reach each other's tables
 Normally each team only sees its own table. A **cluster** is a small group of CTAs
 placed at *neighboring* workstations, close enough that a worker on one team can
@@ -270,6 +302,16 @@ completely full, leaving no room and forcing the workstation to host very few
 workers. Blackwell added this dedicated results-board so the totals live *off* the
 workers' hands, freeing them up. If you remember one thing: **TMEM = the board where
 matrix-multiply totals accumulate, kept separate from the workers' hands.**
+
+**Why a *separate* memory, instead of the usual registers or the table?** The
+accumulator is big (a whole tile of running totals), long-lived (updated on *every*
+step of the K-loop), and read-modify-written constantly by the matrix machine.
+Registers are tiny and *private per thread*, so holding a shared tile-sized accumulator
+there fills every worker's hands and starves the workstation of resident workers
+(wrecking the latency-hiding from §0). The shared table (SMEM) is already busy holding
+the *input* tiles and isn't wired for the machine's every-step access pattern. So
+Blackwell gives the accumulator its own board — big enough, wired straight to the
+Tensor Core, and off both the workers' hands and the table.
 
 ### Global memory (GMEM) — the big warehouse (whole device)
 > **GMEM = "Global Memory,"** physically made of **HBM = "High Bandwidth Memory."**
@@ -366,6 +408,27 @@ references:
 > new that the ordinary language can't express it yet, expert kernel authors write
 > the low-level PTX instruction by hand. This chapter is written at that expert
 > level, which is why it keeps naming these raw instructions.
+
+### CUDA core vs. Tensor core, head to head — and who does what
+
+| | **CUDA core** | **Tensor core** |
+|---|---|---|
+| Does | one scalar op (`+` or `×`) | a whole tile **matrix multiply-accumulate** |
+| Granularity | one number | a grid of numbers at once |
+| Driven by | one thread | a warp / warpgroup, collectively |
+| Flexibility | **general** — any math, control flow, activations | **only** dense matrix multiply |
+| Throughput | baseline | **10×+** on matrix work |
+| Inputs | general (fp32, int, …) | low precision in (fp16/bf16/fp8), accumulates in fp32 |
+
+The way to hold it: a real kernel has **three kinds of worker**, and the threads are
+the *conductor*, not the calculator —
+
+> **TMA moves, the Tensor Core multiplies, and the threads conduct.** The delivery
+> engine (TMA) hauls the data; the matrix machine (Tensor Core) does the heavy
+> multiply; the threads (CUDA cores) mostly *issue* those two, coordinate the pipeline
+> with barriers, and do the lighter epilogue math (scale, bias, activation). For a
+> **non**-matrix kernel (softmax, normalization, elementwise) the Tensor Cores sit idle
+> and the CUDA cores do 100% of the math.
 
 ---
 
@@ -527,3 +590,42 @@ And behind all of it, the §0 idea: a GPU wins not by being fast at one thing, b
 running the same simple work across a huge number of workers — so the whole craft is
 organizing those workers and moving numbers close enough that the matrix machines
 never wait.
+
+---
+
+## Appendix: Numerics & determinism — why Tensor-Core and CUDA-core matmuls differ
+
+A practical payoff of the CUDA-core vs. Tensor-core distinction (§3), and directly
+relevant if you're chasing bit-reproducible results (e.g. logprobs in RL).
+
+**Root cause: floating-point arithmetic isn't exact or associative.** In finite
+precision `(a+b)+c ≠ a+(b+c)`. Summing `[1e8, 1, −1e8]` in ~fp32: left-to-right gives
+`0` (the `1` rounds off the bottom of `1e8`), reordered gives `1`. Same numbers,
+different order, different answer. A dot product is a big sum, so the **order** you add
+the partial products changes the last bits.
+
+Three ways a Tensor-Core matmul and a CUDA-core matmul diverge on the *same* inputs:
+
+1. **Summation order.** A Tensor Core sums its partial products in a fixed
+   hardware-defined tree; a CUDA-core loop sums in whatever order the code picks →
+   different rounding.
+2. **Input precision.** Tensor Cores get speed by truncating inputs — even the "fp32"
+   path is usually **TF32**, which chops the mantissa from 23 to ~10 bits *before*
+   multiplying. A CUDA-core fp32 multiply uses the full operands, so the products differ
+   before any summation.
+3. **Fusion / accumulator width.** A fused multiply-add rounds once; a separate
+   multiply-then-add rounds twice. The two paths fuse and accumulate differently.
+
+**Does a CUDA core reduce precision?** Not *secretly* — it computes in exactly the
+datatype you give it (feed it fp32, you get a genuine fp32 multiply; it can even do
+fp64). Every op still rounds to its type (normal floating-point), but it won't quietly
+drop *below* what you asked for. The Tensor Core's fast modes *do* silently downgrade
+(TF32/bf16) unless you turn that off (e.g. a framework's `allow_tf32 = false`).
+
+**For determinism**, none of this is random by itself — a fixed path gives identical
+bits every run. The trap is the path *changing* between two runs you expect to match:
+Tensor Core vs. CUDA core; a different tile shape / reduction order (often triggered
+just by a different batch size or sequence length); or **split-K** with atomic
+accumulation, which is genuinely nondeterministic run-to-run. To get bit-reproducible
+results, pin the whole path: same core type, same precision, same tile config, and a
+fixed reduction order with no atomics.
