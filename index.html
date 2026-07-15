@@ -56,7 +56,14 @@
   }
   aside .brand{font-weight:700; font-size:15px; letter-spacing:.2px; margin-bottom:4px}
   aside .brand span{color:var(--muted); font-weight:500}
-  aside .src{font-size:12.5px; color:var(--muted); margin-bottom:18px; line-height:1.5}
+  aside .src{font-size:12.5px; color:var(--muted); margin-bottom:16px; line-height:1.5}
+  .chapters{display:flex; flex-direction:column; gap:4px; margin-bottom:20px}
+  .chapters a{font-size:14px; font-weight:600; color:var(--fg); padding:8px 11px; border-radius:8px; border:1px solid var(--line); background:var(--bg)}
+  .chapters a small{display:block; font-weight:400; font-size:11.5px; color:var(--muted); margin-top:2px}
+  .chapters a:hover{border-color:var(--accent); text-decoration:none}
+  .chapters a.current{border-color:var(--accent); background:var(--accent-soft); color:var(--accent)}
+  .chapters a.current small{color:var(--accent)}
+  .toc-label{font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin:0 0 8px 10px; font-weight:600}
   nav#toc{font-size:14px}
   nav#toc a{display:block; color:var(--muted); padding:4px 10px; border-radius:6px; border-left:2px solid transparent}
   nav#toc a:hover{color:var(--fg); background:var(--accent-soft); text-decoration:none}
@@ -117,8 +124,10 @@
   <aside id="sidebar">
     <div class="brand">Annotated GPU Background <span></span></div>
     <div class="src">A from-zero companion to<br>
-      <a href="https://mlc.ai/modern-gpu-programming-for-mlsys/chapter_background/index.html" target="_blank" rel="noopener">Modern GPU Programming for MLSys — Background</a>
+      <a href="https://mlc.ai/modern-gpu-programming-for-mlsys/" target="_blank" rel="noopener">Modern GPU Programming for MLSys</a>
     </div>
+    <div class="chapters" id="chapters"></div>
+    <div class="toc-label">On this page</div>
     <nav id="toc"><div class="loading">Building contents…</div></nav>
   </aside>
 
@@ -197,16 +206,56 @@
     items.forEach(function(it){ var el=document.getElementById(it.id); if(el) obs.observe(el); });
   }
 
-  fetch('background.md', {cache:'no-cache'})
-    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
-    .then(render)
-    .catch(function(err){
-      content.innerHTML = '<div class="err"><strong>Could not load <code>background.md</code>.</strong><br>'+
-        'This page loads the chapter over HTTP, so open it via the published site (GitHub Pages) '+
-        'or a local server (e.g. <code>python -m http.server</code>) rather than a <code>file://</code> path.<br><br>'+
-        '<span style="color:var(--muted)">'+String(err)+'</span></div>';
-      toc.innerHTML = '';
+  // --- chapters ---
+  var CHAPTERS = [
+    {id:'background',  file:'background.md',  title:'1 · Background',  sub:'Execution model, memory, GEMM pipeline'},
+    {id:'performance', file:'performance.md', title:'2 · Performance', sub:'Roofline, arithmetic intensity, tuning'}
+  ];
+  var chaptersEl = document.getElementById('chapters');
+
+  function buildChapterNav(currentId){
+    chaptersEl.innerHTML = '';
+    CHAPTERS.forEach(function(c){
+      var a = document.createElement('a');
+      a.href = '#'+c.id;
+      a.className = (c.id===currentId ? 'current' : '');
+      a.innerHTML = c.title + '<small>'+c.sub+'</small>';
+      chaptersEl.appendChild(a);
     });
+  }
+
+  function loadChapter(id){
+    var chap = CHAPTERS.filter(function(c){return c.id===id;})[0] || CHAPTERS[0];
+    buildChapterNav(chap.id);
+    document.title = 'Annotated: ' + chap.title.replace(/^\d+\s·\s/,'') + ' — Modern GPU Programming for MLSys';
+    content.innerHTML = '<div class="loading">Loading “'+chap.title+'”…</div>';
+    toc.innerHTML = '';
+    fetch(chap.file, {cache:'no-cache'})
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
+      .then(function(md){ render(md); window.scrollTo(0,0); })
+      .catch(function(err){
+        content.innerHTML = '<div class="err"><strong>Could not load <code>'+chap.file+'</code>.</strong><br>'+
+          'This page loads chapters over HTTP, so open it via the published site (GitHub Pages) '+
+          'or a local server (e.g. <code>python -m http.server</code>) rather than a <code>file://</code> path.<br><br>'+
+          '<span style="color:var(--muted)">'+String(err)+'</span></div>';
+      });
+  }
+
+  function currentIdFromHash(){
+    var h = (location.hash||'').replace(/^#/,'');
+    // hash may be a chapter id, or a section anchor within the current chapter
+    var match = CHAPTERS.filter(function(c){return c.id===h;})[0];
+    return match ? match.id : null;
+  }
+
+  var activeChapter = currentIdFromHash() || CHAPTERS[0].id;
+  loadChapter(activeChapter);
+
+  window.addEventListener('hashchange', function(){
+    var id = currentIdFromHash();
+    if(id && id !== activeChapter){ activeChapter = id; loadChapter(id); }
+    // otherwise it's an in-page section anchor — let the browser scroll normally
+  });
 
   // theme toggle (overrides system pref)
   var themeBtn = document.getElementById('themeBtn');

@@ -15,11 +15,15 @@ warehouse) — no CPU, cache, or assembly knowledge required.
 ## Read it
 
 - 📖 **Web version (nicely formatted):** enable GitHub Pages (see below), then visit
-  the published site.
-- 📝 **Plain markdown:** [`background.md`](background.md) — the single source of truth.
+  the published site — a single-page reader with a chapter switcher and per-page
+  table of contents.
+- 📝 **Plain markdown (the source of truth):**
+  - [`background.md`](background.md) — Chapter 1: Background
+  - [`performance.md`](performance.md) — Chapter 2: Performance
 
 ## What it covers
 
+### Chapter 1 — Background *(the execution model)*
 Following the source chapter's four sections:
 
 1. **The Execution Hierarchy** — thread → warp → warpgroup → CTA → cluster → grid, and the idea of *scope*
@@ -27,10 +31,17 @@ Following the source chapter's four sections:
 3. **Compute: CUDA Cores and Tensor Cores** — what actually does the math, and the `wgmma` → `tcgen05` evolution
 4. **The GEMM Data Pipeline** — load / compute / epilogue as an overlapped assembly line that keeps the Tensor Cores fed
 
-Plus extended clarifications that came out of real questions: *lockstep exists only
-inside a warp*, *warp vs. CTA vs. warpgroup* (execution unit vs. cooperation unit vs.
-fixed machine-interface), and *who does what* — TMA moves, Tensor Core multiplies,
-threads conduct.
+Plus clarifications that came out of real questions: *lockstep exists only inside a
+warp*, *warp vs. CTA vs. warpgroup*, *who does what* (TMA moves, Tensor Core
+multiplies, threads conduct), and the numerics of Tensor-Core vs. CUDA-core matmul.
+
+### Chapter 2 — Performance *(what makes a kernel fast)*
+1. **The Roofline Model** — your two ceilings (compute vs. bandwidth) and the ridge point
+2. **Arithmetic Intensity** — FLOP/byte for elementwise, GEMM (`≈ N/3`), and attention
+3. **Optimizing Memory-Bound Kernels** — fusion, tiling, low precision, coalescing
+4. **The Optimization Ladder** — tiled → TMA → warp specialization → clusters → multi-consumer
+5. **Overlap, Occupancy & Resource Pressure** — keeping the matrix machines saturated
+6. **Using Roofline to Guide Optimization** — a three-step "which wall am I hitting?" recipe
 
 ## How the site is built
 
